@@ -1,0 +1,18 @@
+range_image:
+  height: 64
+  width: 2048
+  fov_up: 3.0
+  fov_down: -25.0
+  max_range: 50.0
+  min_range: 2.0
+
+process_split:  'valid'
+semantickitti_cfg: '/root/generate_point_motionflow/semantic-kitti.yaml'
+data_path:  '/share/sunjiadai/semantic_kitti/dataset/'
+flow_dir: 'motionflow_all_instance_1'
+
+save_file: False
+save_dir_name:  'residual_images_1'
+
+visualization: True
+visualization_dir_name: 'flow_images_all_instance_1_visualize_xyl2'

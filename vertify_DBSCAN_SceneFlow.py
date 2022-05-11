@@ -124,9 +124,9 @@ pcd2 = make_open3d_point_cloud(new_point[:, :3], color=[0, 0, 1])
 
 # pcd2 = make_open3d_point_cloud(pc2_data[:, :3], color=[0, 0, 1])
 
-reg = o3d.registration.registration_icp(pcd1, pcd2, 0.2, np.eye(4),
-                        o3d.registration.TransformationEstimationPointToPoint(),
-                        o3d.registration.ICPConvergenceCriteria(max_iteration=200))
+reg = o3d.pipelines.registration.registration_icp(pcd1, pcd2, 0.2, np.eye(4),
+                        o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+                        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=200))
 
 ic(reg.transformation)
 ic(np.asarray(reg.correspondence_set))  # 数量比pc1_data的少
