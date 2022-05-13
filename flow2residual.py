@@ -67,11 +67,11 @@ class Flow2Residual:
         assert flow.shape[0] == label.shape[0] and flow.shape[0] == velo.shape[0]
 
         # TODO gen flow values
-        # # x,y,z L2
-        # flow_value = np.linalg.norm(flow, ord=2, axis=1)
+        # x,y,z L2
+        flow_value = np.linalg.norm(flow, ord=2, axis=1)
 
-        # x,y L2
-        flow_value = np.linalg.norm(flow[:, :2], ord=2, axis=1)
+        # # x,y L2
+        # flow_value = np.linalg.norm(flow[:, :2], ord=2, axis=1)
 
         # TODO how to normalize?
         if normalize:

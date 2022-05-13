@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import datetime
 import os
 from re import L, T
 import yaml
@@ -31,6 +31,8 @@ class ProcessSemanticKITTI:
         self.moving_class = [252, 253, 254, 255, 256, 257, 258, 259]
         self.mini_pcnumber_for_one_instance = 50
         self.debug = FLAG_debug_ICP
+        self.logs = []
+
         # ic(self.process_sequences_list)
 
     def judge_process_sequences(self):
@@ -163,11 +165,14 @@ class ProcessSemanticKITTI:
         pass
 
     def process_sequences_from_gt(self):
+        '''
+        通过moving_instance_mask生成flow，以当前帧为基准计算过去帧到当前帧的flow
+        '''
 
         folder_name = f"motionflow_{FRAME_DIFF}"
         # ic(folder_name)
         for sequence in self.process_sequences_list:
-            f2_moving_count = 0  # 有多少是在第一帧移动在第二帧（第八帧）没有找到对应的moving instance
+            start = time.time()
             sequence = '{0:02d}'.format(int(sequence))
             print(f"Process seq {sequence} ....")
 
@@ -191,61 +196,63 @@ class ProcessSemanticKITTI:
             for f_id in trange(len(self.seq_scan_names)):
                 # if f_id < 620: continue
                 # load the frame_1 data
-                f1_xyzi, f1_semlabel, f1_inslabel, f1_pose = self.get_frame_data(f_id)
-                f1_moitonflow = np.zeros(shape=(f1_xyzi.shape[0], 3))
-                f1_moving_label_mask = (f1_semlabel > 250)
+                current_xyzi, current_semlabel, current_inslabel, current_pose = self.get_frame_data(f_id)
+                motionflow = np.zeros(shape=(current_xyzi.shape[0], 3))
+                currrent_moving_label_mask = (current_semlabel > 250)
 
-                # if there is no moving object in frame_1 or frame_1 is the last frame of this sequence.
-                if (f_id == len(self.seq_scan_names) - FRAME_DIFF) or (f1_moving_label_mask.any() is False):
+                if f_id - FRAME_DIFF < 0 or (currrent_moving_label_mask.any() is False):
                     if FLAG_save_file:
-                        self.save_motionflow_vector_to_file(f_id, f1_moitonflow, folder_name)
+                        self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
                     continue
 
-                # else load the frame_2 data
-                f2_xyzi, f2_semlabel, f2_inslabel, f2_pose = self.get_frame_data(f_id + FRAME_DIFF)
-                f2_moving_label_mask = (f2_semlabel > 250)
-                transform_f2_xyz = (np.linalg.inv(f1_pose) @ \
-                                    (f2_pose @ np.hstack((f2_xyzi[:, :3], np.ones((f2_xyzi.shape[0], 1)))).T)).T
+                last_xyzi, last_semlabel, last_inslabel, last_pose = self.get_frame_data(f_id - FRAME_DIFF)
+                last_moving_label_mask = (last_semlabel > 250)
+                last_xyzi_transformed=(np.linalg.inv(current_pose) @ \
+                                    (last_pose @ np.hstack((last_xyzi[:, :3], np.ones((last_xyzi.shape[0], 1)))).T)).T
 
-                # Count the number and id of moving instances
-                f1_moving_instance_ids, f1_moving_instance_pcnum = np.unique(f1_inslabel[f1_moving_label_mask], return_counts=True)
-                f2_moving_instance_ids = np.unique(f2_inslabel[f2_moving_label_mask])
-                for ins_id, ins_pcnum in zip(f1_moving_instance_ids, f1_moving_instance_pcnum):
-                    if ins_pcnum < self.mini_pcnumber_for_one_instance:  #! 为什么要设置这个最小值
+                current_moving_instance_ids, current_moving_instance_pcnum = np.unique(current_inslabel[currrent_moving_label_mask], return_counts=True)
+                last_moving_instance_ids, last_moving_instance_pcnum = np.unique(last_inslabel[last_moving_label_mask], return_counts=True)
+
+                for ins_id, ins_pcnum in zip(current_moving_instance_ids, current_moving_instance_pcnum):
+                    if FLAG_mini_pcnumber_for_one_instance and ins_pcnum < self.mini_pcnumber_for_one_instance:
+                        log = f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} current_moving_instance_pcnum点太少，没有进入ICP\n'
+                        self.logs.append(log)
                         continue
 
-                    f1_ins_mask = (f1_inslabel == ins_id)
-                    f1_ins_xyzi = f1_xyzi[f1_ins_mask]
-                    if (ins_id in f2_moving_instance_ids) and ((f2_inslabel == ins_id).sum() > 0.2 * self.mini_pcnumber_for_one_instance):  #! 为什么对f2设置这个最小值，0.2怎么来的
-                        f2_part_xyz = transform_f2_xyz[f2_inslabel == ins_id]
-                        flags = "two_instance"
+                    current_ins_mask = (current_inslabel == ins_id)
+                    current_ins_xyzi = current_xyzi[current_ins_mask]
+
+                    if (ins_id in last_moving_instance_ids) and (FLAG_mini_pcnumber_for_one_instance and (last_inslabel == ins_id).sum() > 0.2 * self.mini_pcnumber_for_one_instance):
+                        last_ins_xyzi = last_xyzi_transformed[last_inslabel == ins_id]
+                        flags = 'two_instance'
 
                     else:
-                        ic("!!!!!!!!")
-                        ic((ins_id in f2_moving_instance_ids), ((f2_inslabel == ins_id).sum() > self.mini_pcnumber_for_one_instance))
-                        ic((f2_inslabel == ins_id).sum())
-                        # self.debug = True
-                        # TODO: Need to fixQ!!!!!!!!!
-                        f2_part_xyz = transform_f2_xyz[(f2_semlabel > 250)]
-                        flags = "f2_moving"
-                        f2_moving_count += 1
+                        last_ins_xyzi = last_xyzi[last_semlabel > 250]
+                        if ins_id in last_moving_instance_ids:
+                            temp_content = 'in last_moving_instance_ids'
+                        else:
+                            temp_content = 'not in last_moving_instance_ids '
+                        last_inslabel_sum = (last_inslabel == ins_id).sum()
+                        log = f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} last_inslabel_sum:{last_inslabel_sum}---{temp_content}\n'
+                        self.logs.append(log)
+                        flags = 'unmatched'
 
-                    # the point cloud registration function.
-                    trans = self.caculate_the_releative_pose(f1_ins_xyzi[:, :3], f2_part_xyz[:, :3], flags)
-                    # ic(trans.transformation)
-                    if (trans.transformation == np.eye(4)).all():
-                        continue
+                    trans = self.caculate_the_releative_pose(current_ins_xyzi[:, :3], last_ins_xyzi[:, :3], flags)  #scr:当前帧，tar：过去帧，因为要计算的是当前帧的flow，所以把当前帧转到过去帧
+                    tmp_tranform_xyz = (trans.transformation @ np.hstack((current_ins_xyzi[:, :3], np.ones((current_ins_xyzi.shape[0], 1)))).T).T
+                    ins_flow_xyz = current_ins_xyzi[:, :3] - tmp_tranform_xyz[:, :3]
+                    motionflow[current_ins_mask] = ins_flow_xyz
 
-                    # caculate the moiton flow of each object
-                    tmp_tranform_xyz = (trans.transformation @ np.hstack((f1_ins_xyzi[:, :3], np.ones((f1_ins_xyzi.shape[0], 1)))).T).T
-                    f1_ins_flow_xyz = tmp_tranform_xyz[:, :3] - f1_ins_xyzi[:, :3]
-                    # ic(f1_ins_flow_xyz.shape,f1_ins_flow_xyz)
-                    f1_moitonflow[f1_ins_mask] = f1_ins_flow_xyz
-                    # self.debug = False
                 if FLAG_save_file:
-                    self.save_motionflow_vector_to_file(f_id, f1_moitonflow, folder_name)
-                # visualize_pc_with_motion_flow(f1_xyzi[:, :3], transform_f2_xyz[:, :3], f1_moitonflow)
-                ic(f2_moving_count)
+                    self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
+
+            end = time.time()
+            time_cost = (end - start) / len(self.seq_scan_names)
+            print(f"time cost:{time_cost}")
+
+        if len(self.logs) != 0 and FLAG_save_file:
+            with open('unmatched_log.txt', 'a') as f:
+                f.write(str(datetime.now()) + '\n')
+                f.write(''.join(self.logs))
 
     def process_sequences_from_dbscan(self):
         folder_name = "motionflow_dbscan"
@@ -396,7 +403,7 @@ class ProcessSemanticKITTI:
                         if FLAG_save_file:
                             with open('unmached.txt', 'a') as f:
                                 f.write(f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} last_inslabel_sum:{last_inslabel_sum} {temp_content}\n')
-                        flags = 'unmached'
+                        flags = 'unmatched'
                         continue
 
                     trans = self.caculate_the_releative_pose(current_ins_xyzi[:, :3], last_ins_xyzi[:, :3], flags)
@@ -416,7 +423,31 @@ if __name__ == "__main__":
     FRAME_DIFF = 1  #default:1
     FLAG_mini_pcnumber_for_one_instance = True  #default:True
 
-    proSemKitti = ProcessSemanticKITTI(process_split='train')
-    # proSemKitti.judge_process_sequences()
+    proSemKitti = ProcessSemanticKITTI(process_split='valid')
+    # proSemKitti.process_sequences_from_gt()
     # proSemKitti.process_sequences_from_dbscan()
-    proSemKitti.process_sequences_from_all_instance()
+    # proSemKitti.process_sequences_from_all_instance()
+
+    ############################
+    pose_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/poses.txt'
+    calib_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/calib.txt'
+    velo5 = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/velodyne/000005.bin'
+    velo6 = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/velodyne/000006.bin'
+
+    calib_file = parse_calibration(calib_file)
+    poses = parse_poses(pose_file, calib_file)
+
+    velo5_pc = np.fromfile(velo5, dtype=np.float32).reshape(-1, 4)
+    velo6_pc = np.fromfile(velo6).reshape(-1, 4)
+
+    point1 = velo5_pc[0, :3]
+    point2 = velo5_pc[10, :3]
+    ic(point1, point2)
+
+    transed_point1 = np.linalg.inv(poses[6]) @ (poses[5] @ np.hstack((point1, 1)).T).T
+    transed_point2 = np.linalg.inv(poses[6]) @ (poses[5] @ np.hstack((point2, 1)).T).T
+    ego_motion = transed_point1[:3] - point1
+    ego2 = transed_point2[:3] - point2
+
+    ic(ego_motion)
+    ic(ego2)
