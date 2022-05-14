@@ -164,12 +164,14 @@ class ProcessSemanticKITTI:
         ic(frame_path)
         pass
 
-    def process_sequences_from_gt(self):
+    def process_sequences_from_gt(self, add_ego_motion=False):
         '''
         通过moving_instance_mask生成flow，以当前帧为基准计算过去帧到当前帧的flow
         '''
-
-        folder_name = f"motionflow_{FRAME_DIFF}"
+        if add_ego_motion:
+            folder_name = f'motionflow_ego_motion_{FRAME_DIFF}'
+        else:
+            folder_name = f"motionflow_{FRAME_DIFF}"
         # ic(folder_name)
         for sequence in self.process_sequences_list:
             start = time.time()
@@ -197,8 +199,9 @@ class ProcessSemanticKITTI:
                 # if f_id < 620: continue
                 # load the frame_1 data
                 current_xyzi, current_semlabel, current_inslabel, current_pose = self.get_frame_data(f_id)
-                motionflow = np.zeros(shape=(current_xyzi.shape[0], 3))
                 currrent_moving_label_mask = (current_semlabel > 250)
+
+                motionflow = np.zeros(shape=(current_xyzi.shape[0], 3))
 
                 if f_id - FRAME_DIFF < 0 or (currrent_moving_label_mask.any() is False):
                     if FLAG_save_file:
@@ -207,12 +210,16 @@ class ProcessSemanticKITTI:
 
                 last_xyzi, last_semlabel, last_inslabel, last_pose = self.get_frame_data(f_id - FRAME_DIFF)
                 last_moving_label_mask = (last_semlabel > 250)
+
                 last_xyzi_transformed=(np.linalg.inv(current_pose) @ \
                                     (last_pose @ np.hstack((last_xyzi[:, :3], np.ones((last_xyzi.shape[0], 1)))).T)).T
+                current_xyzi_transformed=(np.linalg.inv(last_pose) @ \
+                    (current_pose@ np.hstack((current_xyzi[:,:3],np.ones((current_xyzi.shape[0],1)))).T)).T
 
                 current_moving_instance_ids, current_moving_instance_pcnum = np.unique(current_inslabel[currrent_moving_label_mask], return_counts=True)
                 last_moving_instance_ids, last_moving_instance_pcnum = np.unique(last_inslabel[last_moving_label_mask], return_counts=True)
 
+                # moving_instance
                 for ins_id, ins_pcnum in zip(current_moving_instance_ids, current_moving_instance_pcnum):
                     if FLAG_mini_pcnumber_for_one_instance and ins_pcnum < self.mini_pcnumber_for_one_instance:
                         log = f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} current_moving_instance_pcnum点太少，没有进入ICP\n'
@@ -242,6 +249,11 @@ class ProcessSemanticKITTI:
                     ins_flow_xyz = current_ins_xyzi[:, :3] - tmp_tranform_xyz[:, :3]
                     motionflow[current_ins_mask] = ins_flow_xyz
 
+                # ego_motion
+                if add_ego_motion:
+                    ego_motion = current_xyzi[:, :3] - current_xyzi_transformed[:, :3]
+                    motionflow += ego_motion
+
                 if FLAG_save_file:
                     self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
 
@@ -249,7 +261,7 @@ class ProcessSemanticKITTI:
             time_cost = (end - start) / len(self.seq_scan_names)
             print(f"time cost:{time_cost}")
 
-        if len(self.logs) != 0 and FLAG_save_file:
+        if FLAG_save_log and len(self.logs) != 0 and FLAG_save_file:
             with open('unmatched_log.txt', 'a') as f:
                 f.write(str(datetime.now()) + '\n')
                 f.write(''.join(self.logs))
@@ -418,36 +430,15 @@ class ProcessSemanticKITTI:
 
 
 if __name__ == "__main__":
-    FLAG_save_file = True  #default:True
-    FLAG_debug_ICP = False  #default:False
-    FRAME_DIFF = 1  #default:1
-    FLAG_mini_pcnumber_for_one_instance = True  #default:True
+    FLAG_save_file = True  # default:True
+    FLAG_save_log = False  # default:True
+    FRAME_DIFF = 1  # default:1
+    FLAG_add_ego_motion = True  # default:False
 
-    proSemKitti = ProcessSemanticKITTI(process_split='valid')
-    # proSemKitti.process_sequences_from_gt()
+    FLAG_debug_ICP = False  # default:False
+    FLAG_mini_pcnumber_for_one_instance = True  # default:True
+
+    proSemKitti = ProcessSemanticKITTI(process_split='train')
+    proSemKitti.process_sequences_from_gt(add_ego_motion=FLAG_add_ego_motion)
     # proSemKitti.process_sequences_from_dbscan()
     # proSemKitti.process_sequences_from_all_instance()
-
-    ############################
-    pose_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/poses.txt'
-    calib_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/calib.txt'
-    velo5 = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/velodyne/000005.bin'
-    velo6 = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/velodyne/000006.bin'
-
-    calib_file = parse_calibration(calib_file)
-    poses = parse_poses(pose_file, calib_file)
-
-    velo5_pc = np.fromfile(velo5, dtype=np.float32).reshape(-1, 4)
-    velo6_pc = np.fromfile(velo6).reshape(-1, 4)
-
-    point1 = velo5_pc[0, :3]
-    point2 = velo5_pc[10, :3]
-    ic(point1, point2)
-
-    transed_point1 = np.linalg.inv(poses[6]) @ (poses[5] @ np.hstack((point1, 1)).T).T
-    transed_point2 = np.linalg.inv(poses[6]) @ (poses[5] @ np.hstack((point2, 1)).T).T
-    ego_motion = transed_point1[:3] - point1
-    ego2 = transed_point2[:3] - point2
-
-    ic(ego_motion)
-    ic(ego2)

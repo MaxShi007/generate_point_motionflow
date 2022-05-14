@@ -9,12 +9,12 @@ range_image:
 semantickitti_cfg: '/root/generate_point_motionflow/semantic-kitti.yaml'
 data_path:  '/share/sunjiadai/semantic_kitti/dataset/'
 
-process_split:  'valid'
+process_split:  'train'
 
-flow_dir: 'motionflow_1' # motionflow_1
+flow_dir: 'motionflow_ego_motion_1' # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1
 
 save_file: False
-save_dir_name:  'flow_images_1_test' # flow_images_1
+save_dir_name:  'flow_images_ego_motion_1' # flow_images_1   # flow_images_all_instance_1   # flow_images_ego_motion_1
 
 visualization: True
-visualization_dir_name: 'flow_images_1_visualize' # flow_images_1_visualize
+visualization_dir_name: 'flow_images_ego_motion_1_visualize' # flow_images_1_visualize   # flow_images_all_instance_1_visualize   # flow_images_ego_motion_1_visualize
