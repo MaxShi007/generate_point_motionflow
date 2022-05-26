@@ -35,5 +35,6 @@ calib_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/calib.txt'
 
 calib_file = parse_calibration(calib_file)
 poses = parse_poses(pose_file, calib_file)
+ego_motion = poses[1:] - poses[:-1]
 
 ic(poses)

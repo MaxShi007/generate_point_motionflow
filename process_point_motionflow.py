@@ -22,7 +22,7 @@ class ProcessSemanticKITTI:
 
         self.semkitti_cfg = '/root/generate_point_motionflow/semantic-kitti.yaml'
         self.color_map_cfg = '/root/generate_point_motionflow/instance_colormap.yaml'
-        self.data_path = '/share/sunjiadai/semantic_kitti/dataset'
+        self.data_path = '/share/sgb/semantic_kitti/dataset'
         self.cfg = yaml.safe_load(open(self.semkitti_cfg, 'r'))
         assert process_split in splits
         self.process_split = process_split
@@ -103,17 +103,11 @@ class ProcessSemanticKITTI:
         if flags == "two_instance":
             init_matrix[0:3, 3] = pc2_xyz.mean(axis=0) - pc1_xyz.mean(axis=0)
 
-        # trans = o3d.registration.registration_icp(
-        #     pcd1,
-        #     pcd2,
-        #     0.2,
-        #     init_matrix,  #np.eye(4), # max_correspondence_distance, init
-        #     o3d.registration.TransformationEstimationPointToPoint(),  # estimation_method
-        #     o3d.registration.ICPConvergenceCriteria(max_iteration=200))  # criteria
-        if FRAME_DIFF != 1:
             iteration = 200  # 1000
         else:
             iteration = 200
+        if self.debug:
+            start = time.time()
 
         trans = o3d.pipelines.registration.registration_icp(
             pcd1,
@@ -133,7 +127,9 @@ class ProcessSemanticKITTI:
                 np.eye(4),  # max_correspondence_distance, init
                 o3d.pipelines.registration.TransformationEstimationPointToPoint(),  # estimation_method
                 o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=iteration))  # criteria
-
+        if self.debug:
+            end = time.time()
+            print(f"point_num:{len(pc1_xyz)} cost_time:{end-start}")
         if self.debug:
             # evaluation = o3d.registration.evaluate_registration(pcd1, pcd2, 0.2, np.eye(4))
             # ic(trans.transformation)
@@ -168,6 +164,7 @@ class ProcessSemanticKITTI:
         '''
         通过moving_instance_mask生成flow，以当前帧为基准计算过去帧到当前帧的flow
         '''
+        count = 0
         if add_ego_motion:
             folder_name = f'motionflow_ego_motion_{FRAME_DIFF}'
         else:
@@ -228,6 +225,9 @@ class ProcessSemanticKITTI:
 
                     current_ins_mask = (current_inslabel == ins_id)
                     current_ins_xyzi = current_xyzi[current_ins_mask]
+                    #             if ins_id == 0 and (ins_id in last_moving_instance_ids) and (FLAG_mini_pcnumber_for_one_instance and (last_inslabel == ins_id).sum() > 0.2 * self.mini_pcnumber_for_one_instance):
+                    #                 count += 1
+                    # print(f'count:{count}')
 
                     if (ins_id in last_moving_instance_ids) and (FLAG_mini_pcnumber_for_one_instance and (last_inslabel == ins_id).sum() > 0.2 * self.mini_pcnumber_for_one_instance):
                         last_ins_xyzi = last_xyzi_transformed[last_inslabel == ins_id]
@@ -259,7 +259,7 @@ class ProcessSemanticKITTI:
 
             end = time.time()
             time_cost = (end - start) / len(self.seq_scan_names)
-            print(f"time cost:{time_cost}")
+            print(f"time cost per seq mean:{time_cost}")
 
         if FLAG_save_log and len(self.logs) != 0 and FLAG_save_file:
             with open('unmatched_log.txt', 'a') as f:
@@ -354,8 +354,9 @@ class ProcessSemanticKITTI:
                     self.save_motionflow_vector_to_file(f_id, f1_moitonflow, folder_name)
                 # visualize_pc_with_motion_flow(f1_xyzi[:, :3], transform_f2_xyz[:, :3], f1_moitonflow)
 
-    #这个方法我是按照当前帧和前FRAME_DIFF做差写的，所以改process_sequence_from_gt的时候不需要改这个函数
     def process_sequences_from_all_instance(self):
+
+        start = time.time()
 
         folder_name = f'motionflow_all_instance_{FRAME_DIFF}'
         for sequence in self.process_sequences_list:
@@ -408,13 +409,15 @@ class ProcessSemanticKITTI:
                         #todo:如果当前帧的instance在last_frame中没有，那么就把当前帧instance的所有点都设置为0，点数小于mini_pcnumber_for_one_instance的情况同理，并且记录一下有多少这种情况，方便后续统计
                         #todo: 这种方法合适吗？
                         if ins_id in last_instance_ids:
-                            temp_content = 'in'
+                            temp_content = 'in last_instance_ids'
                         else:
-                            temp_content = 'not_in '
+                            temp_content = 'not in last_instance_ids'
                         last_inslabel_sum = (last_inslabel == ins_id).sum()
-                        if FLAG_save_file:
-                            with open('unmached.txt', 'a') as f:
-                                f.write(f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} last_inslabel_sum:{last_inslabel_sum} {temp_content}\n')
+                        log = f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} last_inslabel_sum:{last_inslabel_sum}---{temp_content}\n'
+                        self.logs.append(log)
+                        # if FLAG_save_file:
+                        #     with open('unmached.txt', 'a') as f:
+                        #         f.write(f'sequence:{sequence} f_id:{f_id} ins_id:{ins_id} ins_pcnum:{ins_pcnum} last_inslabel_sum:{last_inslabel_sum} {temp_content}\n')
                         flags = 'unmatched'
                         continue
 
@@ -427,13 +430,21 @@ class ProcessSemanticKITTI:
 
                 if FLAG_save_file:
                     self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
+            end = time.time()
+            time_cost = (end - start) / len(self.seq_scan_names)
+            print(f'time cost per seq mean:{time_cost}')
+
+        if FLAG_save_log and len(self.logs) != 0 and FLAG_save_file:
+            with open('unmatched_log.txt', 'a') as f:
+                f.write(str(datetime.now()) + '\n')
+                f.write(''.join(self.logs))
 
 
 if __name__ == "__main__":
-    FLAG_save_file = True  # default:True
+    FLAG_save_file = False  # default:True
     FLAG_save_log = False  # default:True
     FRAME_DIFF = 1  # default:1
-    FLAG_add_ego_motion = True  # default:False
+    FLAG_add_ego_motion = False  # default:False
 
     FLAG_debug_ICP = False  # default:False
     FLAG_mini_pcnumber_for_one_instance = True  # default:True
