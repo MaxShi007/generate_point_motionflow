@@ -6,11 +6,12 @@ range_image:
   max_range: 50.0
   min_range: 2.0
 
-semantickitti_cfg: '/root/generate_point_motionflow/semantic-kitti.yaml'
+semantickitti_cfg: './semantic-kitti.yaml'
 data_path:  '/share/sgb/semantic_kitti/dataset/'
 
-process_split:  'valid'
+process_split:  'train' # train valid
 
+# 下面是flow2residual的相关参数
 flow_dir: 'motionflow_ego_motion_1' # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1
 
 save_file: False
@@ -18,3 +19,13 @@ save_dir_name:  'flow_images_ego_motion_1' # flow_images_1   # flow_images_all_i
 
 visualization: False
 visualization_dir_name: 'flow_images_ego_motion_1_visualize' # flow_images_1_visualize   # flow_images_all_instance_1_visualize   # flow_images_ego_motion_1_visualize
+
+# 下面是生成flow dataset相关参数
+save_dataset: False
+dataset_form: 'nsfp'
+save_dataset_root: '/share/sgb/semantic_kitti/'
+save_dataset_dir_name: 'SemanticKitti_Flow_Dataset_1'
+
+#remove_ground_point
+non_ground_mask: True
+non_ground_mask_root: '/share/sgb/kitti-ground'
