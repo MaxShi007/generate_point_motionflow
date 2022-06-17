@@ -11,6 +11,7 @@ data_path:  '/share/sgb/semantic_kitti/dataset/'
 
 process_split:  'valid'
 
+
 flow_dir: 'motionflow_ego_motion_1' # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1
 
 save_file: False
