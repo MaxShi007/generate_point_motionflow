@@ -11,7 +11,7 @@ class Flow2Residual:
     Converts flow to residual
     """
 
-    def __init__(self, config_file='flow2residual.yaml'):
+    def __init__(self, config_file='flow2some.yaml'):
 
         self.config = yaml.load(open(config_file), Loader=yaml.FullLoader)
 
@@ -213,5 +213,5 @@ class Flow2Residual:
 
 if __name__ == "__main__":
 
-    residual = Flow2Residual(config_file='flow2residual.yaml')
+    residual = Flow2Residual(config_file='flow2some.yaml')
     residual.generate_residual()
