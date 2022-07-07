@@ -20,8 +20,8 @@ class ProcessSemanticKITTI:
 
     def __init__(self, process_split="train") -> None:
 
-        self.semkitti_cfg = '/root/generate_point_motionflow/semantic-kitti.yaml'
-        self.color_map_cfg = '/root/generate_point_motionflow/instance_colormap.yaml'
+        self.semkitti_cfg = './semantic-kitti.yaml'
+        self.color_map_cfg = './instance_colormap.yaml'
         self.data_path = '/share/sgb/semantic_kitti/dataset'
         self.cfg = yaml.safe_load(open(self.semkitti_cfg, 'r'))
         assert process_split in splits
@@ -441,15 +441,15 @@ class ProcessSemanticKITTI:
 
 
 if __name__ == "__main__":
-    FLAG_save_file = False  # default:True
-    FLAG_save_log = False  # default:True
+    FLAG_save_file = True  # default:True
+    FLAG_save_log = False  # default:False
     FRAME_DIFF = 1  # default:1
     FLAG_add_ego_motion = False  # default:False
 
     FLAG_debug_ICP = False  # default:False
     FLAG_mini_pcnumber_for_one_instance = True  # default:True
 
-    proSemKitti = ProcessSemanticKITTI(process_split='train')
+    proSemKitti = ProcessSemanticKITTI(process_split='valid')
     proSemKitti.process_sequences_from_gt(add_ego_motion=FLAG_add_ego_motion)
     # proSemKitti.process_sequences_from_dbscan()
     # proSemKitti.process_sequences_from_all_instance()
