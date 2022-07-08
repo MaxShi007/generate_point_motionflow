@@ -12,13 +12,13 @@ data_path:  '/share/sgb/semantic_kitti/dataset/'
 process_split:  'train' # train valid
 
 # 下面是flow2residual的相关参数
-flow_dir: 'motionflow_ego_motion_1' # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1
+flow_dir: 'motionflow_ego_motion_5' # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1
 
-save_file: False
-save_dir_name:  'flow_images_ego_motion_1' # flow_images_1   # flow_images_all_instance_1   # flow_images_ego_motion_1
+save_file: True # True False
+save_dir_name:  'flow_images_ego_motion_5' # flow_images_1   # flow_images_all_instance_1   # flow_images_ego_motion_1
 
-visualization: False
-visualization_dir_name: 'flow_images_ego_motion_1_visualize' # flow_images_1_visualize   # flow_images_all_instance_1_visualize   # flow_images_ego_motion_1_visualize
+visualization: False # False True
+visualization_dir_name: 'flow_images_ego_motion_5_visualize' # flow_images_1_visualize   # flow_images_all_instance_1_visualize   # flow_images_ego_motion_1_visualize
 
 # 下面是生成flow dataset相关参数
 save_dataset: False
@@ -27,5 +27,5 @@ save_dataset_root: '/share/sgb/semantic_kitti/'
 save_dataset_dir_name: 'SemanticKitti_Flow_Dataset_1'
 
 #remove_ground_point
-non_ground_mask: True
+non_ground_mask: False # True
 non_ground_mask_root: '/share/sgb/kitti-ground'

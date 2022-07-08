@@ -60,11 +60,11 @@ class ProcessSemanticKITTI:
         # 1. the non-ground points mask
         use_GndNet_mask = True
         if use_GndNet_mask == True:
-            label_path = self.seq_scan_names[frame_id].replace("velodyne", "ground_masks")[:-4] + ".label"  #! 这个文件哪里来的？
+            label_path = self.seq_scan_names[frame_id].replace("velodyne", "ground_masks")[:-4] + ".label"
             ground_labels = np.fromfile(label_path, dtype=np.uint32)
             non_ground_mask = (ground_labels == 2)  # 0 is the unlabel data, 1: ground, 2: non-ground points
         else:
-            non_ground_mask = pc_data[:, 2] > -1.4  # z-axis #!这个值怎么设定的，可视化了一帧，1.4以下还有很多有用的点
+            non_ground_mask = pc_data[:, 2] > -1.4  # z-axis
 
         # 2. The mask of the close/near points
         tmp_dis = np.linalg.norm(pc_data[:, 0:2], axis=1)  # np.sqrt(pc_data[:, 0] **2 + pc_data[:, 1] **2)
@@ -166,9 +166,9 @@ class ProcessSemanticKITTI:
         '''
         count = 0
         if add_ego_motion:
-            folder_name = f'motionflow_ego_motion_{FRAME_DIFF}'
+            folder_name = f'motionflow_egomotion_{pose_file_name.split(".")[0]}_{FRAME_DIFF}'  #! 注意！ 为了使用4dmos_poses.txt文件，我把文件名的格式改了。
         else:
-            folder_name = f"motionflow_{FRAME_DIFF}"
+            folder_name = f"motionflow_{pose_file_name.split('.')[0]}_{FRAME_DIFF}"  #! 注意！ 为了使用4dmos_poses.txt文件，我把文件名的格式改了。
         # ic(folder_name)
         for sequence in self.process_sequences_list:
             start = time.time()
@@ -178,7 +178,7 @@ class ProcessSemanticKITTI:
             # get scan paths
             scan_paths = os.path.join(self.data_path, "sequences", str(sequence), "velodyne")
             label_paths = os.path.join(self.data_path, "sequences", str(sequence), "labels")
-            pose_file = os.path.join(self.data_path, "sequences", str(sequence), "poses.txt")
+            pose_file = os.path.join(self.data_path, "sequences", str(sequence), pose_file_name)
             calib_file = os.path.join(self.data_path, "sequences", str(sequence), "calib.txt")
 
             calib_file = parse_calibration(calib_file)
@@ -244,7 +244,7 @@ class ProcessSemanticKITTI:
                         self.logs.append(log)
                         flags = 'unmatched'
 
-                    trans = self.caculate_the_releative_pose(current_ins_xyzi[:, :3], last_ins_xyzi[:, :3], flags)  #scr:当前帧，tar：过去帧，因为要计算的是当前帧的flow，所以把当前帧转到过去帧
+                    trans = self.caculate_the_releative_pose(current_ins_xyzi[:, :3], last_ins_xyzi[:, :3], flags)  #scr:当前帧，tar：过去帧，因为要计算的是当前帧的flow，所以把当前帧icp到过去帧
                     tmp_tranform_xyz = (trans.transformation @ np.hstack((current_ins_xyzi[:, :3], np.ones((current_ins_xyzi.shape[0], 1)))).T).T
                     ins_flow_xyz = current_ins_xyzi[:, :3] - tmp_tranform_xyz[:, :3]
                     motionflow[current_ins_mask] = ins_flow_xyz
@@ -441,15 +441,16 @@ class ProcessSemanticKITTI:
 
 
 if __name__ == "__main__":
-    FLAG_save_file = True  # default:True
+    FLAG_save_file = True  # default:True  False
     FLAG_save_log = False  # default:False
     FRAME_DIFF = 1  # default:1
-    FLAG_add_ego_motion = False  # default:False
+    FLAG_add_ego_motion = True  # default:False
+    pose_file_name = '4DMOS_POSES.txt'  # poses.txt
 
     FLAG_debug_ICP = False  # default:False
     FLAG_mini_pcnumber_for_one_instance = True  # default:True
 
-    proSemKitti = ProcessSemanticKITTI(process_split='valid')
+    proSemKitti = ProcessSemanticKITTI(process_split='train')  # train valid
     proSemKitti.process_sequences_from_gt(add_ego_motion=FLAG_add_ego_motion)
     # proSemKitti.process_sequences_from_dbscan()
     # proSemKitti.process_sequences_from_all_instance()
