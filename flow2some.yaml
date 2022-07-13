@@ -8,12 +8,10 @@ range_image:
 
 semantickitti_cfg: './semantic-kitti.yaml'
 data_path:  '/share/sgb/semantic_kitti/dataset/'
-
+flow_dir: 'non_ground_motionflow_egomotion_4DMOS_POSES_1'  # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1  non_ground_motionflow_egomotion_4DMOS_POSES_1
 process_split:  'train' # train valid
 
 # 下面是flow2residual的相关参数
-flow_dir: 'motionflow_ego_motion_5' # motionflow_1   # motionflow_all_instance_1   # motionflow_ego_motion_1
-
 save_file: True # True False
 save_dir_name:  'flow_images_ego_motion_5' # flow_images_1   # flow_images_all_instance_1   # flow_images_ego_motion_1
 
@@ -21,10 +19,11 @@ visualization: False # False True
 visualization_dir_name: 'flow_images_ego_motion_5_visualize' # flow_images_1_visualize   # flow_images_all_instance_1_visualize   # flow_images_ego_motion_1_visualize
 
 # 下面是生成flow dataset相关参数
-save_dataset: False
-dataset_form: 'nsfp'
+save_dataset: True
+velodyne_dir: "non_ground_velodyne"
+labels_dir: "non_ground_labels"
 save_dataset_root: '/share/sgb/semantic_kitti/'
-save_dataset_dir_name: 'SemanticKitti_Flow_Dataset_1'
+save_dataset_dir_name: 'Flow_Dataset_1_nonground_4dmosposes'
 
 #remove_ground_point
 non_ground_mask: False # True
