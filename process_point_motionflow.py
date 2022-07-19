@@ -459,7 +459,7 @@ class ProcessSemanticKITTI:
                     for current_ins_id in sorted(current_ins_center.keys()):
                         min_dis = [np.linalg.norm(current_ins_center[current_ins_id] - last_ins_center[last_ins_id]) for last_ins_id in order_last_ins_id]  #f1的一个中心和f2中的每个中心算距离
                         idx = np.argmin(min_dis)
-                        if min_dis[idx] > (3.33 * FRAME_DIFF): continue  #! 120km/h=33.3m/s
+                        if min_dis[idx] > (10 * FRAME_DIFF): continue  #! 360km/h=100m/s
                         current_last_ins_match[current_ins_id] = (order_last_ins_id[idx], min_dis[idx])
 
                     for ins_id, match_tuple in current_last_ins_match.items():
