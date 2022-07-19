@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Flag
 import os
 from re import L, T
 import yaml
@@ -58,7 +59,7 @@ class ProcessSemanticKITTI:
         #       2. dbscan
 
         # 1. the non-ground points mask
-        use_GndNet_mask = True
+        use_GndNet_mask = False
         if use_GndNet_mask == True:
             label_path = self.seq_scan_names[frame_id].replace("velodyne", "ground_masks")[:-4] + ".label"
             ground_labels = np.fromfile(label_path, dtype=np.uint32)
@@ -68,7 +69,7 @@ class ProcessSemanticKITTI:
 
         # 2. The mask of the close/near points
         tmp_dis = np.linalg.norm(pc_data[:, 0:2], axis=1)  # np.sqrt(pc_data[:, 0] **2 + pc_data[:, 1] **2)
-        near_point_mask = (tmp_dis < 25) & (tmp_dis > 2)  # radius_threshold = 25 # .m distance
+        near_point_mask = (tmp_dis < 25) & (tmp_dis > 2)  # radius_threshold = 25 # .m distance  #!根据半径卡2-25米的点云
         valid_mask = near_point_mask & non_ground_mask
 
         labels = dbscan_labels(pc_data[valid_mask], epsilon=0.75, minpoints=50)
@@ -84,6 +85,43 @@ class ProcessSemanticKITTI:
             vis_pcd = generate_point_cloud(pc_data[:, :3], each_points_color=colors_by_dbscan)
             coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
             o3d.visualization.draw_geometries([vis_pcd, coordinate_frame])
+
+        velodyne_pose = self.seq_poses[frame_id]
+
+        return pc_data, ins_merge_labels, velodyne_pose
+
+    # todo 重写get_frame_data_with_dbscan，不需要去掉地面点(因为取moving point做dbscan，moving point本来就没地面点),也不卡半径
+    def get_frame_data_with_dbscan_for_kittiroad(self, frame_id):
+        pc_data = np.fromfile(self.seq_scan_names[frame_id], dtype=np.float32).reshape((-1, 4))
+        label = np.fromfile(self.seq_label_names[frame_id], dtype=np.uint32).reshape((-1))
+        sem_label = label & 0xFFFF
+        moving_mask = (sem_label > 250)
+
+        near_point_mask = np.ones(pc_data.shape[0], dtype=bool)
+
+        mask_distance = False
+        if mask_distance:
+            tmp_dis = np.linalg.norm(pc_data[:, 0:2], axis=1)
+            near_point_mask = (tmp_dis < 25) & (tmp_dis > 2)
+
+        valid_mask = near_point_mask & moving_mask
+
+        # print(frame_id)
+        try:
+            labels = dbscan_labels(pc_data[valid_mask], epsilon=1, minpoints=5)
+            ins_merge_labels = -np.ones(shape=(pc_data.shape[0]))
+            ins_merge_labels[valid_mask] = labels
+        except Exception as e:
+            print(e)
+            print(f"no moving point in frame:{frame_id}")
+            ins_merge_labels = -np.ones(shape=(pc_data.shape[0]))
+
+        #****
+        # path = "dbscan_result_41_1_5_maskdis"
+        # if not os.path.exists(path):
+        #     os.mkdir(path)
+        # np.savez(file=f"./{path}/{str(frame_id)}", velo=pc_data, label=label, ins_label=ins_merge_labels)
+        #*******
 
         velodyne_pose = self.seq_poses[frame_id]
 
@@ -158,7 +196,16 @@ class ProcessSemanticKITTI:
         frame_path = os.path.join(motionflow_dir, os.path.split(scan_path)[1].replace('.bin', '.flow'))
         np.save(frame_path, motionflow_xyz)
         ic(frame_path)
-        pass
+        #*******
+        # if f_id >= 1:
+        #     current_velo = np.fromfile(scan_path, dtype=np.float32).reshape(-1, 4)[:, :3]
+        #     last_velo = np.fromfile(self.seq_scan_names[f_id - 1], dtype=np.float32).reshape(-1, 4)[:, :3]
+        #     path = "motionflow_vector_41"
+        #     if not os.path.exists(path):
+        #         os.mkdir(path)
+        #     print(f"./{path}/{str(f_id)}")
+        #     np.savez(file=f"./{path}/{str(f_id)}", current_velo=current_velo, last_velo=last_velo, motionflow=motionflow_xyz)
+        #*******
 
     def process_sequences_from_gt(self, add_ego_motion=False):
         '''
@@ -200,7 +247,7 @@ class ProcessSemanticKITTI:
 
                 motionflow = np.zeros(shape=(current_xyzi.shape[0], 3))
 
-                if f_id - FRAME_DIFF < 0 or (currrent_moving_label_mask.any() is False):
+                if f_id - FRAME_DIFF < 0:
                     if FLAG_save_file:
                         self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
                     continue
@@ -225,9 +272,6 @@ class ProcessSemanticKITTI:
 
                     current_ins_mask = (current_inslabel == ins_id)
                     current_ins_xyzi = current_xyzi[current_ins_mask]
-                    #             if ins_id == 0 and (ins_id in last_moving_instance_ids) and (FLAG_mini_pcnumber_for_one_instance and (last_inslabel == ins_id).sum() > 0.2 * self.mini_pcnumber_for_one_instance):
-                    #                 count += 1
-                    # print(f'count:{count}')
 
                     if (ins_id in last_moving_instance_ids) and (FLAG_mini_pcnumber_for_one_instance and (last_inslabel == ins_id).sum() > 0.2 * self.mini_pcnumber_for_one_instance):
                         last_ins_xyzi = last_xyzi_transformed[last_inslabel == ins_id]
@@ -271,8 +315,8 @@ class ProcessSemanticKITTI:
         for sequence in self.process_sequences_list[7:]:
             sequence = '{0:02d}'.format(int(sequence))
             print(f"Process seq {sequence} ....")
-            import pdb
-            pdb.set_trace()
+            # import pdb
+            # pdb.set_trace()
             # get scan paths
             scan_paths = os.path.join(self.data_path, "sequences", str(sequence), "velodyne")
             label_paths = os.path.join(self.data_path, "sequences", str(sequence), "labels")
@@ -309,14 +353,16 @@ class ProcessSemanticKITTI:
 
                 #不同帧之间的instance匹配，利用两帧instance中心点的距离
                 f1_ins_center, f2_ins_center, f1_f2_ins_match = {}, {}, {}
+                #求f1的center
                 f1_ids, pc_nums = np.unique(f1_inslabel, return_counts=True)
                 for ins_id, pc_num in zip(f1_ids, pc_nums):
-                    if ins_id == -1 or pc_num > 2000: continue
+                    if ins_id == -1 or pc_num > 2000: continue  #! 为什么超过2000个点要排除不做匹配？
                     f1_ins_center[ins_id] = np.mean(f1_xyzi[:, :3][f1_inslabel == ins_id], axis=0)
+                #求f2的center
                 f2_ids, pc_nums = np.unique(f2_inslabel, return_counts=True)
                 for ins_id, pc_num in zip(f2_ids, pc_nums):
                     if ins_id == -1 or pc_num > 2000: continue
-                    f2_ins_center[ins_id] = np.mean(f2_xyzi[:, :3][f2_inslabel == ins_id], axis=0)
+                    f2_ins_center[ins_id] = np.mean(f2_xyzi[:, :3][f2_inslabel == ins_id], axis=0)  #! 为什么在f2坐标系里求center，不是应该转到同一个坐标系吗，这里可能是个bug
 
                 if (len(f1_ins_center) == 0) or (len(f2_ins_center) == 0):
                     if FLAG_save_file:
@@ -325,9 +371,9 @@ class ProcessSemanticKITTI:
 
                 order_f2_ins_id = sorted(f2_ins_center.keys())
                 for f1_ins_id in sorted(f1_ins_center.keys()):
-                    min_dis = [np.linalg.norm(f1_ins_center[f1_ins_id] - f2_ins_center[f2_ins_id]) for f2_ins_id in order_f2_ins_id]
+                    min_dis = [np.linalg.norm(f1_ins_center[f1_ins_id] - f2_ins_center[f2_ins_id]) for f2_ins_id in order_f2_ins_id]  #f1的一个中心和f2中的每个中心算距离
                     idx = np.argmin(min_dis)
-                    if min_dis[idx] > 1.0: continue  #!这个1是怎么来的？
+                    if min_dis[idx] > 1.0: continue  #!这个1是怎么来的？为什么大于1米就不匹配
                     f1_f2_ins_match[f1_ins_id] = (order_f2_ins_id[idx], min_dis[idx])
 
                 for ins_id, mathch_tuple in f1_f2_ins_match.items():
@@ -353,6 +399,89 @@ class ProcessSemanticKITTI:
                 if FLAG_save_file:
                     self.save_motionflow_vector_to_file(f_id, f1_moitonflow, folder_name)
                 # visualize_pc_with_motion_flow(f1_xyzi[:, :3], transform_f2_xyz[:, :3], f1_moitonflow)
+
+
+#先读取kittiroad的moving mask（这就已经不包括地面点了）然后对这些moving point进行dbscan
+
+    def process_sequences_from_dbscan_for_kittiroad(self, add_ego_motion=False):
+        if add_ego_motion:
+            folder_name = f'motionflow_egomotion_{pose_file_name.split(".")[0]}_{FRAME_DIFF}'
+        else:
+            folder_name = f"motionflow_{pose_file_name.split('.')[0]}_{FRAME_DIFF}"
+
+        for sequence in self.process_sequences_list:
+            sequence = '{0:02d}'.format(int(sequence))
+            print(f"Process seq {sequence} ....")
+
+            scan_paths = os.path.join(self.data_path, "sequences", str(sequence), "velodyne")
+            label_paths = os.path.join(self.data_path, "sequences", str(sequence), "labels")
+            pose_file = os.path.join(self.data_path, "sequences", str(sequence), pose_file_name)
+            calib_file = os.path.join(self.data_path, "sequences", str(sequence), "calib.txt")
+
+            calib_file = parse_calibration(calib_file)
+            self.seq_poses = parse_poses(pose_file, calib_file)  #tr_inv pose tr
+
+            self.seq_scan_names = sorted(glob.glob(os.path.join(scan_paths, "*.bin")))
+            self.seq_label_names = sorted(glob.glob(os.path.join(label_paths, "*.label")))
+
+            assert len(self.seq_scan_names) == len(self.seq_poses)
+
+            for f_id in trange(len(self.seq_scan_names)):
+                current_xyzi, current_inslabel, current_pose = self.get_frame_data_with_dbscan_for_kittiroad(f_id)
+
+                motionflow = np.zeros((current_xyzi.shape[0], 3))
+
+                if f_id - FRAME_DIFF < 0:
+                    if FLAG_save_file:
+                        self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
+                    continue
+
+                last_xyzi, last_inslabel, last_pose = self.get_frame_data_with_dbscan_for_kittiroad(f_id - FRAME_DIFF)
+
+                last_xyzi_transformed=(np.linalg.inv(current_pose) @ \
+                                    (last_pose @ np.hstack((last_xyzi[:, :3], np.ones((last_xyzi.shape[0], 1)))).T)).T#把last转到current坐标系下
+                current_xyzi_transformed = (np.linalg.inv(last_pose) @ (current_pose @ np.hstack((current_xyzi[:, :3], np.ones((current_xyzi.shape[0], 1)))).T)).T  #把current转到last坐标系下
+
+                current_ins_center, last_ins_center, current_last_ins_match = {}, {}, {}
+
+                current_ids, current_pc_nums = np.unique(current_inslabel, return_counts=True)
+                for ins_id, pc_num in zip(current_ids, current_pc_nums):
+                    if ins_id == -1: continue
+                    current_ins_center[ins_id] = np.mean(current_xyzi[:, :3][current_inslabel == ins_id], axis=0)
+
+                last_ids, last_pc_nums = np.unique(last_inslabel, return_counts=True)
+                for ins_id, pc_num in zip(last_ids, last_pc_nums):
+                    if ins_id == -1: continue
+                    last_ins_center[ins_id] = np.mean(last_xyzi_transformed[:, :3][last_inslabel == ins_id], axis=0)
+
+                if (len(current_ins_center) != 0) and (len(last_ins_center) != 0):
+                    order_last_ins_id = sorted(last_ins_center.keys())
+                    for current_ins_id in sorted(current_ins_center.keys()):
+                        min_dis = [np.linalg.norm(current_ins_center[current_ins_id] - last_ins_center[last_ins_id]) for last_ins_id in order_last_ins_id]  #f1的一个中心和f2中的每个中心算距离
+                        idx = np.argmin(min_dis)
+                        # if min_dis[idx] > 1.0: continue  #!不能用这个，会把高速运动的车过滤掉
+                        current_last_ins_match[current_ins_id] = (order_last_ins_id[idx], min_dis[idx])
+
+                    for ins_id, match_tuple in current_last_ins_match.items():
+                        current_ins_mask = (current_inslabel == ins_id)
+                        current_ins_xyzi = current_xyzi[current_ins_mask]
+                        last_part_xyz = last_xyzi_transformed[last_inslabel == match_tuple[0]]
+
+                        trans = self.caculate_the_releative_pose(current_ins_xyzi[:, :3], last_part_xyz[:, :3], flags='two_instance')
+
+                        if (trans.transformation == np.eye(4)).all():
+                            continue
+
+                        tmp_tranform_xyz = (trans.transformation @ np.hstack((current_ins_xyzi[:, :3], np.ones((current_ins_xyzi.shape[0], 1)))).T).T
+                        current_ins_flow_xyz = current_ins_xyzi[:, :3] - tmp_tranform_xyz[:, :3]
+                        motionflow[current_ins_mask] = current_ins_flow_xyz
+
+                if add_ego_motion:
+                    ego_motion = current_xyzi[:, :3] - current_xyzi_transformed[:, :3]
+                    motionflow += ego_motion
+
+                if FLAG_save_file:
+                    self.save_motionflow_vector_to_file(f_id, motionflow, folder_name)
 
     def process_sequences_from_all_instance(self):
 
@@ -439,18 +568,17 @@ class ProcessSemanticKITTI:
                 f.write(str(datetime.now()) + '\n')
                 f.write(''.join(self.logs))
 
-
 if __name__ == "__main__":
-    FLAG_save_file = True  # default:True  False
+    FLAG_save_file = True  # default:True
     FLAG_save_log = False  # default:False
     FRAME_DIFF = 1  # default:1
     FLAG_add_ego_motion = True  # default:False
-    pose_file_name = '4DMOS_POSES.txt'  # poses.txt
+    pose_file_name = '4DMOS_POSES.txt'  # poses.txt   4DMOS_POSES.txt
 
     FLAG_debug_ICP = False  # default:False
     FLAG_mini_pcnumber_for_one_instance = True  # default:True
 
     proSemKitti = ProcessSemanticKITTI(process_split='train')  # train valid
-    proSemKitti.process_sequences_from_gt(add_ego_motion=FLAG_add_ego_motion)
-    # proSemKitti.process_sequences_from_dbscan()
+    # proSemKitti.process_sequences_from_gt(add_ego_motion=FLAG_add_ego_motion)
+    proSemKitti.process_sequences_from_dbscan_for_kittiroad(add_ego_motion=FLAG_add_ego_motion)
     # proSemKitti.process_sequences_from_all_instance()

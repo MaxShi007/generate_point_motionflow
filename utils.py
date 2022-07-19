@@ -14,59 +14,61 @@ def labels2colors(labels, colormap_data):
 
 
 def parse_calibration(filename):
-        """ read calibration file with given filename
+    """ read calibration file with given filename
 
             Returns
             -------
             dict
                 Calibration matrices as 4x4 numpy arrays.
         """
-        calib = {}
+    calib = {}
 
-        calib_file = open(filename)
-        for line in calib_file:
-            key, content = line.strip().split(":")
-            values = [float(v) for v in content.strip().split()]
+    calib_file = open(filename)
+    for line in calib_file:
+        key, content = line.strip().split(":")
+        values = [float(v) for v in content.strip().split()]
 
-            pose = np.zeros((4, 4))
-            pose[0, 0:4] = values[0:4]
-            pose[1, 0:4] = values[4:8]
-            pose[2, 0:4] = values[8:12]
-            pose[3, 3] = 1.0
+        pose = np.zeros((4, 4))
+        pose[0, 0:4] = values[0:4]
+        pose[1, 0:4] = values[4:8]
+        pose[2, 0:4] = values[8:12]
+        pose[3, 3] = 1.0
 
-            calib[key] = pose
+        calib[key] = pose
 
-        calib_file.close()
+    calib_file.close()
 
-        return calib
+    return calib
+
 
 def parse_poses(filename, calibration):
-        """ read poses file with per-scan poses from given filename
+    """ read poses file with per-scan poses from given filename
 
             Returns
             -------
             list
                 list of poses as 4x4 numpy arrays.
         """
-        file = open(filename)
+    file = open(filename)
 
-        poses = []
+    poses = []
 
-        Tr = calibration["Tr"]
-        Tr_inv = np.linalg.inv(Tr)
+    Tr = calibration["Tr"]
+    Tr_inv = np.linalg.inv(Tr)
 
-        for line in file:
-            values = [float(v) for v in line.strip().split()]
+    for line in file:
+        values = [float(v) for v in line.strip().split()]
 
-            pose = np.zeros((4, 4))
-            pose[0, 0:4] = values[0:4]
-            pose[1, 0:4] = values[4:8]
-            pose[2, 0:4] = values[8:12]
-            pose[3, 3] = 1.0
+        pose = np.zeros((4, 4))
+        pose[0, 0:4] = values[0:4]
+        pose[1, 0:4] = values[4:8]
+        pose[2, 0:4] = values[8:12]
+        pose[3, 3] = 1.0
 
-            poses.append(np.matmul(Tr_inv, np.matmul(pose, Tr)))
+        poses.append(np.matmul(Tr_inv, np.matmul(pose, Tr)))
 
-        return poses
+    return poses
+
 
 def make_open3d_point_cloud(xyz, color=None):
     pcd = o3d.geometry.PointCloud()
@@ -78,14 +80,12 @@ def make_open3d_point_cloud(xyz, color=None):
     return pcd
 
 
-def dbscan_labels(pointcloud, epsilon, minpoints, rgb_weight=0,
-                  algorithm='ball_tree'):
+def dbscan_labels(pointcloud, epsilon, minpoints, rgb_weight=0, algorithm='ball_tree'):
     if rgb_weight > 0:
         X = pointcloud.to_array()
         X[:, 3:] *= rgb_weight
     else:
         X = pointcloud
 
-    _, labels = dbscan(X, eps=epsilon, min_samples=minpoints,
-                       algorithm=algorithm)
+    _, labels = dbscan(X, eps=epsilon, min_samples=minpoints, algorithm=algorithm)
     return np.asarray(labels)
