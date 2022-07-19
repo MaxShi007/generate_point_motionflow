@@ -30,11 +30,5 @@ from utils import parse_calibration, parse_poses
 # ic(data.shape, np.unique(data, return_counts=True))
 # print((data == 0).sum() / 3)
 
-pose_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/poses.txt'
-calib_file = '/share/sunjiadai/semantic_kitti/dataset/sequences/08/calib.txt'
-
-calib_file = parse_calibration(calib_file)
-poses = parse_poses(pose_file, calib_file)
-ego_motion = poses[1:] - poses[:-1]
-
-ic(poses)
+velo = np.fromfile("/share/sgb/semantic_kitti/dataset/sequences/38/velodyne/000020.bin", dtype=np.float32).reshape(-1, 4)
+print(velo.shape)
